@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 using System.Runtime.InteropServices;
 using Silk.NET.Maths;
 using Silk.NET.WebGPU;
@@ -23,7 +23,9 @@ public static unsafe class Program
     private static TextureFormat _surfaceFormat;
     private static Texture* _depthTexture;
     private static TextureView* _depthView;
-    private static CubeScene? _cubeScene;
+
+    private static ChunkRenderer? _chunkRenderer;
+    private static WorldManager? _worldManager;
     private static double _time;
 
     public static void Main()
@@ -32,7 +34,7 @@ public static unsafe class Program
         {
             API = GraphicsAPI.None,
             Size = new Vector2D<int>(1280, 720),
-            Title = "Silk.NET WebGPU PBR Cube",
+            Title = "Silk.NET WebGPU Voxel Engine",
             VSync = true
         };
 
@@ -60,7 +62,11 @@ public static unsafe class Program
 
         ConfigureSurface();
         CreateDepthResources();
-        _cubeScene = new CubeScene(_wgpu, _device, _queue, _surfaceFormat, DepthFormat, 1.5f);
+
+        _chunkRenderer = new ChunkRenderer(_wgpu, _device, _queue, _surfaceFormat, DepthFormat);
+        _worldManager = new WorldManager(_wgpu, _device, _queue);
+
+        _worldManager.GenerateWorld(4, 1, 4);
     }
 
     private static Adapter* RequestAdapter()
@@ -169,12 +175,14 @@ public static unsafe class Program
 
     private static void OnRender(double deltaSeconds)
     {
-        if (_cubeScene is null)
+        if (_chunkRenderer is null || _worldManager is null)
         {
             return;
         }
 
         _time += deltaSeconds;
+
+        _worldManager.Update();
 
         SurfaceTexture surfaceTexture = new();
         _wgpu.SurfaceGetCurrentTexture(_surface, &surfaceTexture);
@@ -193,7 +201,7 @@ public static unsafe class Program
             View = colorView,
             LoadOp = LoadOp.Clear,
             StoreOp = StoreOp.Store,
-            ClearValue = new Color(0.025, 0.03, 0.04, 1.0)
+            ClearValue = new Color(0.4, 0.6, 0.9, 1.0) // Sky blue
         };
 
         RenderPassDepthStencilAttachment depthAttachment = new()
@@ -215,14 +223,26 @@ public static unsafe class Program
 
         RenderPassEncoder* pass = _wgpu.CommandEncoderBeginRenderPass(encoder, &passDescriptor);
 
-        Matrix4x4 model = Matrix4x4.CreateRotationY((float)_time) * Matrix4x4.CreateRotationX((float)_time * 0.45f);
-        _cubeScene.SetCubeTransform(model);
+        float radius = 100.0f;
+        float camX = MathF.Sin((float)_time * 0.5f) * radius;
+        float camZ = MathF.Cos((float)_time * 0.5f) * radius;
+        Vector3 cameraPosition = new Vector3(camX + 64, 40, camZ + 64);
 
-        Vector3 cameraPosition = new(0, 1.2f, 4.0f);
-        Matrix4x4 view = Matrix4x4.CreateLookAt(cameraPosition, Vector3.Zero, Vector3.UnitY);
+        Matrix4x4 view = Matrix4x4.CreateLookAt(cameraPosition, new Vector3(64, 0, 64), Vector3.UnitY);
         float aspect = (float)_surfaceConfiguration.Width / _surfaceConfiguration.Height;
-        Matrix4x4 projection = Matrix4x4.CreatePerspectiveFieldOfView(MathF.PI / 4.0f, aspect, 0.1f, 100.0f);
-        _cubeScene.Draw(pass, view * projection, cameraPosition, Vector3.Normalize(new Vector3(-0.4f, -1.0f, -0.2f)));
+        Matrix4x4 projection = Matrix4x4.CreatePerspectiveFieldOfView(MathF.PI / 4.0f, aspect, 0.1f, 1000.0f);
+
+        _chunkRenderer.UpdateScene(GpuSceneData.Create(
+            view * projection,
+            cameraPosition,
+            Vector3.Normalize(new Vector3(-0.5f, -1.0f, -0.5f)),
+            new Vector3(1.0f, 0.95f, 0.9f),
+            4.0f,
+            new Vector3(0.4f, 0.6f, 0.9f),
+            1.0f
+        ));
+
+        _worldManager.Draw(pass, _chunkRenderer);
 
         _wgpu.RenderPassEncoderEnd(pass);
         CommandBufferDescriptor commandBufferDescriptor = new();
@@ -233,6 +253,7 @@ public static unsafe class Program
 
     private static void OnClosing()
     {
-        _cubeScene?.Dispose();
+        _worldManager?.Dispose();
+        _chunkRenderer?.Dispose();
     }
 }
