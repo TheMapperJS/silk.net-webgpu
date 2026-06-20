@@ -3,7 +3,7 @@
 ## Run the sample
 
 ```powershell
-dotnet run --project C:\dt\webgpu\SilkWebGpuPbr\SilkWebGpuPbr.csproj
+dotnet run --(insert path here)/SilkWebGpuPbr.csproj
 ```
 
 This opens a Silk.NET window and renders a rotating PBR-lit cube with WebGPU.
