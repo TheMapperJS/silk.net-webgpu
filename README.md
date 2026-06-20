@@ -60,3 +60,7 @@ renderer.Draw(renderPass, gpuCube);
 
 The pipeline expects `TextureFormat` values from your configured WebGPU surface and depth texture. It does not own the device, queue, surface, command encoder, render pass, or frame lifecycle.
 
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details. Free for both personal and commercial use.
+
